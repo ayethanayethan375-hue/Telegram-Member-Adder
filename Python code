@@ -1,0 +1,74 @@
+import asyncio
+import random
+from telethon import TelegramClient
+from telethon.tl.functions.channels import InviteToChannelRequest
+from telethon.errors import (
+    FloodWaitError, 
+    UserPrivacyRestrictedError, 
+    PeerFloodError, 
+    UserNotMutualContactError
+)
+
+# --- CONFIG ---
+# Get your api_id and api_hash from https://my.telegram.org
+api_id = 0  # Replace with your API ID (Integer)
+api_hash = 'YOUR_API_HASH'
+phone = 'YOUR_PHONE_NUMBER'
+
+source_group_username = 'source_group' # Group to scrape members from
+target_group_username = 'target_group' # Group to add members to
+
+client = TelegramClient('session_ingyao', api_id, api_hash)
+
+async def main():
+    await client.start(phone)
+    print("✅ Login Success! Member adding process started...")
+
+    try:
+        source_entity = await client.get_entity(source_group_username)
+        target_entity = await client.get_entity(target_group_username)
+
+        participants = await client.get_participants(source_entity)
+        print(f"📊 Found {len(participants)} members in {source_group_username}.")
+
+        count = 0
+        for user in participants:
+            if user.bot: 
+                continue 
+
+            try:
+                await client(InviteToChannelRequest(target_entity, [user]))
+                count += 1
+                username = f"(@{user.username})" if user.username else "(No Username)"
+                print(f"✅ Added: {user.first_name} {username}")
+
+                wait_time = random.randint(15, 30)
+                print(f"⏳ Sleeping for {wait_time}s before next add...")
+                await asyncio.sleep(wait_time)
+
+            except UserPrivacyRestrictedError:
+                print(f"❌ {user.first_name}: Privacy settings restricted.")
+            except UserNotMutualContactError:
+                print(f"❌ {user.first_name}: Mutual contact required.")
+            except PeerFloodError:
+                print("⚠️ PeerFloodError: Daily limit reached.")
+                break
+            except FloodWaitError as e:
+                print(f"⏳ FloodWait: Waiting {e.seconds}s...")
+                await asyncio.sleep(e.seconds)
+            except Exception as e:
+                print(f"⚠️ Error with {user.first_name}: {e}")
+                continue
+
+            if count >= 50:
+                print("\n🎯 Daily limit (50) reached.")
+                break
+
+    except Exception as e:
+        print(f"‼️ Fatal Error: {e}")
+
+    print(f"\n✨ Process Finished! Total added: {count}")
+
+if __name__ == '__main__':
+    with client:
+        client.loop.run_until_complete(main())
